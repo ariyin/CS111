@@ -11,7 +11,7 @@ make
 sudo insmod proc_count.ko
 cat /proc/count
 ```
-TODO: results?
+Result: 173
 
 ## Cleaning Up
 ```shell
@@ -23,7 +23,7 @@ make clean
 ```python
 python -m unittest
 ```
-TODO: results?
+Result: Ran 3 tests in 2.207s, OK
 
 Report which kernel release version you tested your module on
 (hint: use `uname`, check for options with `man uname`).
@@ -32,4 +32,4 @@ It should match release numbers as seen on https://www.kernel.org/.
 ```shell
 uname -r -s -v
 ```
-TODO: kernel ver?
+Kernel version: Linux 5.14.8-arch1-1 #1 SMP PREEMPT Sun, 26 Sun 2021 19:36:15 +0000
