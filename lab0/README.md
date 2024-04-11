@@ -1,5 +1,5 @@
 # A Kernel Seedling
-TODO: intro
+Counts the current number of running processes (or tasks) running.
 
 ## Building
 ```shell
