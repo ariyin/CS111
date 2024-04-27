@@ -54,8 +54,9 @@ int main(int argc, char *argv[])
 		// after dup, any read operations from stdin will read from the pipe
 		dup2(fd[0], 0);
 
-		// close the write end of the pipe in the parent process
+		// close the pipes
 		close(fd[1]);  
+		close(fd[0]);
 	}
 
 	// last argument, don't create pipe
