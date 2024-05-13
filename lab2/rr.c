@@ -17,11 +17,11 @@ struct process
   u32 pid;
   u32 arrival_time;
   u32 burst_time;
+  u32 time_left; 
+  u32 start_time; 
+  bool started;
 
   TAILQ_ENTRY(process) pointers;
-
-  /* Additional fields here */
-  /* End of "Additional fields here" */
 };
 
 TAILQ_HEAD(process_list, process);
@@ -135,6 +135,8 @@ void init_processes(const char *path,
     (*process_data)[i].pid = next_int(&data, data_end);
     (*process_data)[i].arrival_time = next_int(&data, data_end);
     (*process_data)[i].burst_time = next_int(&data, data_end);
+    (*process_data)[i].time_left = (*process_data)[i].burst_time;
+    (*process_data)[i].started = false;
   }
 
   munmap((void *)data, size);
@@ -159,9 +161,96 @@ int main(int argc, char *argv[])
   u32 total_waiting_time = 0;
   u32 total_response_time = 0;
 
-  /* Your code here */
-  
-  /* End of "Your code here" */
+  // add processes to new list and sort based on arrival time
+  for (u32 i = 0; i < size; i++)
+  {
+    struct process* current_process = &data[i];
+    struct process* next_process = TAILQ_FIRST(&list); // start from the beginning of the list
+
+    while (next_process != NULL) {
+      // compare current_process with next_process
+      if (current_process->arrival_time < next_process->arrival_time) {
+        TAILQ_INSERT_BEFORE(next_process, current_process, pointers);
+        break; 
+      }
+      next_process = TAILQ_NEXT(next_process, pointers);
+    }
+
+    // if we reached the end of the list, insert at the tail
+    if (next_process == NULL) {
+      TAILQ_INSERT_TAIL(&list, current_process, pointers);
+    }
+  }
+
+  u32 current_time = 0;
+  struct process* previous_task = NULL;
+  // create queue for tasks that have arrived
+  struct process_list queue;
+  TAILQ_INIT(&queue);
+
+  // loop through the processes if either the queue/list has something or previous_task != NULL
+  while (!(TAILQ_EMPTY(&list) && TAILQ_EMPTY(&queue) && previous_task == NULL))
+  {
+    // while list isn't empty, check if the earliest process in the list has arrived
+    while (!TAILQ_EMPTY(&list))
+    {
+      struct process* p = TAILQ_FIRST(&list);
+      if (p->arrival_time <= current_time)
+      {
+        // remove process from list and add it to the end of the queue
+        TAILQ_REMOVE(&list, p, pointers);
+        TAILQ_INSERT_TAIL(&queue, p, pointers);
+      }
+      else
+      {
+        break;
+      }
+    }
+
+    // move previous task to the end of queue
+    if (previous_task != NULL)
+    {
+      TAILQ_INSERT_TAIL(&queue, previous_task, pointers);
+    }
+    
+    // if the queue is not empty
+    if (!TAILQ_EMPTY(&queue))
+    {
+      // execute (remove) the first process
+      struct process* current_task = TAILQ_FIRST(&queue);
+      TAILQ_REMOVE(&queue, current_task, pointers);
+
+      // if the current task just started
+      if (!current_task->started)
+      {
+        // update the current task's start values and overall total_response_time
+        current_task->start_time = current_time;
+        current_task->started = true;
+        total_response_time += current_time - current_task->arrival_time; // response time = start time (current time) - arrival time
+      }
+
+      // if the current task's time_left > q
+      if (current_task->time_left > quantum_length)
+      {
+        // run the current task for quantum_length
+        current_task->time_left -= quantum_length;
+        current_time = current_time + quantum_length - 1;
+        previous_task = current_task;
+      }
+
+      // if the current task's time_left <= q (finishing a process)
+      else
+      {
+        // run the current task for time_left and update total_waiting_time
+        total_waiting_time += ((current_time + current_task->time_left) - current_task->burst_time - current_task->arrival_time); // waiting time = end_time - burst_time - arrival_time; end_time = current_time + time_left
+        current_time = current_time + current_task->time_left - 1;
+        previous_task = NULL;
+      }
+    }
+
+    // increment current_time even if there are no processes in the queue
+    current_time += 1;
+  }
 
   printf("Average waiting time: %.2f\n", (float)total_waiting_time / (float)size);
   printf("Average response time: %.2f\n", (float)total_response_time / (float)size);
