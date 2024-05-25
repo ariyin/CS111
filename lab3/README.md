@@ -8,8 +8,10 @@ make
 
 ## Running
 ```shell
-TODO how to run and results
+./hash-table-tester -t [THREADS] -s [ENTRIES]
 ```
+- THREADS: number of threads (default 4)
+- ENTRIES: number of hash table entries per thread (default 25,000)
 
 ## First Implementation
 In the `hash_table_v1_add_entry` function, I added TODO
