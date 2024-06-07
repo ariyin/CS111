@@ -1,6 +1,6 @@
 # Hey! I'm Filing Here
 
-In this lab, I successfully implemented the following TODO
+Created a 1 MiB ext2 file system with 2 directories, 1 regular file, and 1 symbolic link.
 
 ## Building
 ```shell
@@ -25,7 +25,10 @@ sudo umount mnt
 ```python
 python -m unittest
 ```
+Result: Ran 2 tests in 0.222s, OK
+
 ```shell
 dumpe2fs cs111-base.img
 fsck.ext2 cs111-base.img
+ls -ain mnt/
 ```

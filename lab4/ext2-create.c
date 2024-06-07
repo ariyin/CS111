@@ -196,7 +196,6 @@ void write_superblock(int fd) {
 
 	struct ext2_superblock superblock = {0};
 
-	// TODO finish the superblock number setting
 	superblock.s_inodes_count = NUM_INODES;
 	superblock.s_blocks_count = NUM_BLOCKS;
 	superblock.s_r_blocks_count = 0;
@@ -255,7 +254,6 @@ void write_block_group_descriptor_table(int fd) {
 
 	struct ext2_block_group_descriptor block_group_descriptor = {0};
 
-	// TODO finish the block group descriptor number setting
 	block_group_descriptor.bg_block_bitmap = BLOCK_BITMAP_BLOCKNO;
 	block_group_descriptor.bg_inode_bitmap = INODE_BITMAP_BLOCKNO;
 	block_group_descriptor.bg_inode_table = INODE_TABLE_BLOCKNO;
@@ -277,9 +275,25 @@ void write_block_bitmap(int fd)
 		errno_exit("lseek");
 	}
 
-	// TODO It's all yours
+	// total blocks: 8 * BLOCK_SIZE = 8192 blocks
 	// zero initialize everything by assigning {0} to a struct
 	u8 map_value[BLOCK_SIZE] = {0};
+
+	// specify that 24-1023 are free, and everything else is unavailable
+	// 0: free, 1: used
+
+	// 0 - 24
+	map_value[0] = 0b11111111;
+	map_value[1] = 0b11111111;
+	map_value[2] = 0b01111111; // 24 on bit "7"
+
+	// -1024
+	map_value[NUM_BLOCKS / 8 - 1] = 0b10000000; // 1024 on bit "7", 1023, 1022, ...
+
+	// unusable, 1025 - end
+	for (int i = NUM_BLOCKS / 8; i < BLOCK_SIZE; i++) {
+		map_value[i] = 0b11111111;
+	}
 
 	if (write(fd, map_value, BLOCK_SIZE) != BLOCK_SIZE)
 	{
@@ -295,9 +309,18 @@ void write_inode_bitmap(int fd)
 		errno_exit("lseek");
 	}
 
-	// TODO It's all yours
 	// zero initialize everything by assigning {0} to a struct
 	u8 map_value[BLOCK_SIZE] = {0};
+
+	// last inode is inode 13 (hello -> hello-world)
+	// 0: free, 1: used
+	map_value[0] = 0b11111111;
+	map_value[1] = 0b00011111;
+
+	// unusable 
+	for (int i = NUM_INODES / 8; i < BLOCK_SIZE; i++) {
+		map_value[i] = 0b11111111;
+	}
 
 	if (write(fd, map_value, BLOCK_SIZE) != BLOCK_SIZE)
 	{
@@ -322,6 +345,8 @@ void write_inode(int fd, u32 index, struct ext2_inode *inode) {
 void write_inode_table(int fd) {
 	u32 current_time = get_current_time();
 
+	// lost+found
+	// directory, uid: 0, gid: 0, drwxr-xr-x, size: 1024
 	struct ext2_inode lost_and_found_inode = {0};
 	lost_and_found_inode.i_mode = EXT2_S_IFDIR
 	                              | EXT2_S_IRUSR
@@ -343,13 +368,122 @@ void write_inode_table(int fd) {
 	lost_and_found_inode.i_block[0] = LOST_AND_FOUND_DIR_BLOCKNO;
 	write_inode(fd, LOST_AND_FOUND_INO, &lost_and_found_inode);
 
-	// TODO It's all yours
-	// TODO finish the inode entries for the other files
+	// root
+	// directory, uid: 0, gid: 0, drwxr-xr-r, size: 1024
+	struct ext2_inode root_inode = {0};
+	root_inode.i_mode = EXT2_S_IFDIR
+	                              | EXT2_S_IRUSR
+	                              | EXT2_S_IWUSR
+	                              | EXT2_S_IXUSR
+	                              | EXT2_S_IRGRP
+	                              | EXT2_S_IXGRP
+	                              | EXT2_S_IROTH
+	                              | EXT2_S_IXOTH;
+	root_inode.i_uid = 0;
+	root_inode.i_size = 1024;
+	root_inode.i_atime = current_time;
+	root_inode.i_ctime = current_time;
+	root_inode.i_mtime = current_time;
+	root_inode.i_dtime = 0;
+	root_inode.i_gid = 0;
+	root_inode.i_links_count = 3;
+	root_inode.i_blocks = 2; /* These are oddly 512 blocks */
+	root_inode.i_block[0] = ROOT_DIR_BLOCKNO;
+	write_inode(fd, EXT2_ROOT_INO, &root_inode);
+
+	// hello-world
+	// file, uid: 1000, gid: 1000, -rw-r--r--, size: 12
+	struct ext2_inode hw_inode = {0};
+	hw_inode.i_mode = EXT2_S_IFREG
+	                              | EXT2_S_IRUSR
+	                              | EXT2_S_IWUSR
+	                              | EXT2_S_IRGRP
+	                              | EXT2_S_IROTH;
+	hw_inode.i_uid = 1000;
+	hw_inode.i_size = 12;
+	hw_inode.i_atime = current_time;
+	hw_inode.i_ctime = current_time;
+	hw_inode.i_mtime = current_time;
+	hw_inode.i_dtime = 0;
+	hw_inode.i_gid = 1000;
+	hw_inode.i_links_count = 1;
+	hw_inode.i_blocks = 2; /* These are oddly 512 blocks */
+	hw_inode.i_block[0] = HELLO_WORLD_FILE_BLOCKNO;
+	write_inode(fd, HELLO_WORLD_INO, &hw_inode);
+
+	// hello
+	// symlink, uid: 1000, gid: 1000, lrw-r--r--, size: 11
+	struct ext2_inode hello_inode = {0};
+	hello_inode.i_mode = EXT2_S_IFLNK
+	                              | EXT2_S_IRUSR
+								  | EXT2_S_IWUSR
+	                              | EXT2_S_IRGRP
+	                              | EXT2_S_IROTH;
+	hello_inode.i_uid = 1000;
+	hello_inode.i_size = 11;
+	hello_inode.i_atime = current_time;
+	hello_inode.i_ctime = current_time;
+	hello_inode.i_mtime = current_time;
+	hello_inode.i_dtime = 0;
+	hello_inode.i_gid = 1000;
+	hello_inode.i_links_count = 1;
+	hello_inode.i_blocks = 0; // symlink no blocks
+	// strcpy(hello_inode.i_block, "hello-world");
+	hello_inode.i_block[0] = 0x6c6c6568;
+	hello_inode.i_block[1] = 0x6F772D6F;
+	hello_inode.i_block[2] = 0x00646C72;
+	write_inode(fd, HELLO_INO, &hello_inode);
 }
 
 void write_root_dir_block(int fd)
 {
-	// TODO It's all yours
+	off_t off = BLOCK_OFFSET(ROOT_DIR_BLOCKNO);
+	off = lseek(fd, off, SEEK_SET);
+	if (off == -1) {
+		errno_exit("lseek");
+	}
+
+	ssize_t bytes_remaining = BLOCK_SIZE;
+
+	// .
+	struct ext2_dir_entry current_entry = {0};
+	dir_entry_set(current_entry, EXT2_ROOT_INO, ".");
+	dir_entry_write(current_entry, fd);
+
+	bytes_remaining -= current_entry.rec_len;
+
+	// ..
+	struct ext2_dir_entry parent_entry = {0};
+	dir_entry_set(parent_entry, EXT2_ROOT_INO, "..");
+	dir_entry_write(parent_entry, fd);
+
+	bytes_remaining -= parent_entry.rec_len;
+
+	// hello
+	struct ext2_dir_entry hello_entry = {0};
+	dir_entry_set(hello_entry, HELLO_INO, "hello");
+	dir_entry_write(hello_entry, fd);
+
+	bytes_remaining -= hello_entry.rec_len;
+
+	// hello-world
+	struct ext2_dir_entry hw_entry = {0};
+	dir_entry_set(hw_entry, HELLO_WORLD_INO, "hello-world");
+	dir_entry_write(hw_entry, fd);
+
+	bytes_remaining -= hw_entry.rec_len;
+
+	// lost+found
+	struct ext2_dir_entry lost_and_found_entry = {0};
+	dir_entry_set(lost_and_found_entry, LOST_AND_FOUND_INO, "lost+found");
+	dir_entry_write(lost_and_found_entry, fd);
+
+	bytes_remaining -= lost_and_found_entry.rec_len;
+
+	// remaining space
+	struct ext2_dir_entry fill_entry = {0};
+	fill_entry.rec_len = bytes_remaining;
+	dir_entry_write(fill_entry, fd);
 }
 
 void write_lost_and_found_dir_block(int fd) {
@@ -380,7 +514,17 @@ void write_lost_and_found_dir_block(int fd) {
 
 void write_hello_world_file_block(int fd)
 {
-	// TODO It's all yours
+	off_t off = BLOCK_OFFSET(HELLO_WORLD_FILE_BLOCKNO);
+	off = lseek(fd, off, SEEK_SET);
+	if (off == -1) {
+		errno_exit("lseek");
+	}
+
+	char* content = "Hello world\n";
+	size_t length = strlen(content);
+	if (write(fd, content, length) != length) {
+		errno_exit("write");
+	}
 }
 
 int main(int argc, char *argv[]) {
